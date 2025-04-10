@@ -1,0 +1,9 @@
+colorama==0.4.6
+pathlib==1.0.1
+typing-extensions==4.7.1
+python-dotenv==1.0.0
+sqlalchemy==2.0.20
+cryptography==41.0.2
+requests==2.31.0
+pyyaml==6.0.1
+rich==13.5.2 
