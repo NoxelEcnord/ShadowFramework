@@ -83,6 +83,16 @@ class ShadowShell:
             return
 
         option, value = args
+
+        # Check if the value is a search result number
+        if value.isdigit() and self.last_search_results:
+            index = int(value) - 1
+            if 0 <= index < len(self.last_search_results):
+                value = self.last_search_results[index][0]
+            else:
+                print(f"{Fore.RED}[!] Invalid search result number.{Style.RESET_ALL}")
+                return
+
         if self.current_module:
             module = self.module_loader.modules[self.current_module]
             if hasattr(module, 'MODULE_INFO') and 'options' in module.MODULE_INFO:
