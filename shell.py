@@ -2,6 +2,11 @@ import os
 import subprocess
 import readline
 from colorama import Fore, Style
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+
+console = Console()
 
 class ShadowShell:
     def __init__(self, db_manager, module_loader, plugin_loader, session_manager):
@@ -19,6 +24,7 @@ class ShadowShell:
         self.plugin_loader = plugin_loader
         self.session_manager = session_manager
         self.current_module = None
+        self.options = {}
         self.running = True
 
         # Set up autocomplete
@@ -54,11 +60,16 @@ class ShadowShell:
 
         module = self.module_loader.modules[self.current_module]
         if hasattr(module, 'MODULE_INFO') and 'options' in module.MODULE_INFO:
-            print(f"{Fore.CYAN}[+] Options for {self.current_module}:{Style.RESET_ALL}")
+            table = Table(title=f"Options for {self.current_module}")
+            table.add_column("Option", style="cyan")
+            table.add_column("Description", style="white")
+            
             for option, description in module.MODULE_INFO['options'].items():
-                print(f"  {option}: {description}")
+                table.add_row(option, description)
+            
+            console.print(table)
         else:
-            print(f"{Fore.YELLOW}[!] No options defined for this module.{Style.RESET_ALL}")
+            console.print(f"[yellow][!] No options defined for this module.[/yellow]")
 
     def set_option(self, *args):
         """
@@ -78,14 +89,12 @@ class ShadowShell:
         module = self.module_loader.modules[self.current_module]
         if hasattr(module, 'MODULE_INFO') and 'options' in module.MODULE_INFO:
             if option in module.MODULE_INFO['options']:
-                if not hasattr(module, 'options'):
-                    module.options = {}
-                module.options[option] = value
-                print(f"{Fore.GREEN}[+] {option} => {value}{Style.RESET_ALL}")
+                self.options[option] = value
+                console.print(f"[green][+] {option} => {value}[/green]")
             else:
-                print(f"{Fore.RED}[!] Invalid option: {option}{Style.RESET_ALL}")
+                console.print(f"[red][!] Invalid option: {option}[/red]")
         else:
-            print(f"{Fore.YELLOW}[!] No options defined for this module.{Style.RESET_ALL}")
+            console.print(f"[yellow][!] No options defined for this module.[/yellow]")
 
     def show_info(self, *args):
         """
@@ -207,8 +216,8 @@ class ShadowShell:
         """
         Display the help menu.
         """
-        help_text = f"""
-        {Fore.CYAN}Core Commands:{Style.RESET_ALL}
+        help_text = """
+        [bold cyan]Core Commands:[/bold cyan]
         help              Show this help menu
         exit              Exit the framework
         use <module>      Load a module
@@ -220,7 +229,7 @@ class ShadowShell:
         sh                Drop into a local shell
         /<command>        Execute a command on the local machine
         """
-        print(help_text)
+        console.print(Panel(help_text, title="ShadowFramework Help", expand=False))
 
     def exit(self, *args):
         """
@@ -240,9 +249,10 @@ class ShadowShell:
         module_name = args[0]
         if module_name in self.module_loader.modules:
             self.current_module = module_name
-            print(f"{Fore.GREEN}[+] Loaded module: {module_name}{Style.RESET_ALL}")
+            self.options = {} # Clear options for new module
+            console.print(f"[green][+] Loaded module: {module_name}[/green]")
         else:
-            print(f"{Fore.RED}[!] Module not found: {module_name}{Style.RESET_ALL}")
+            console.print(f"[red][!] Module not found: {module_name}[/red]")
 
     def search_modules(self, *args):
         """
@@ -303,13 +313,18 @@ class ShadowShell:
         Show command history.
         """
         lines = int(args[0]) if args else None
-        with open("~/.shadow/history.txt", "r") as f:
+        history_file = os.path.join(os.path.expanduser("~"), ".shadow", "history.txt")
+        if not os.path.exists(history_file):
+            console.print(f"[yellow][!] No history file found.[/yellow]")
+            return
+
+        with open(history_file, "r") as f:
             history = f.readlines()
             if lines:
                 history = history[-lines:]
-            print(f"{Fore.CYAN}[+] Command history:{Style.RESET_ALL}")
+            console.print(f"[cyan][+] Command history:[/cyan]")
             for line in history:
-                print(f"  {line.strip()}")
+                console.print(f"  {line.strip()}")
 
     def clear_screen(self, *args):
         """

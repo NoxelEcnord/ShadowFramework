@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# Logs
+logs/*.log
+history.txt
+
+# Database
+db/*.db
+
+# Loot and Exfiltrated data
+loot/exfiltrated_data/*
+!loot/exfiltrated_data/.gitkeep
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

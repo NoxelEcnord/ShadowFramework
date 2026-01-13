@@ -11,10 +11,9 @@ class Module:
         }
     }
 
-    def __init__(self,framework):
-        self.run=run
+    def __init__(self, framework):
         self.framework = framework
         self.nm = nmap.PortScanner()
 
     def run(self):
-        print("4unning")
+        print("[+] Running")

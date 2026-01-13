@@ -23,7 +23,6 @@ class Module:
             framework: The framework instance.
         """
         self.framework = framework
-        self.run = run
         self.nm = nmap.PortScanner()
 
     def run(self):

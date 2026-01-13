@@ -3,7 +3,13 @@ import os
 import sys
 from pathlib import Path
 from colorama import Fore, Style
-import os
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.logging import RichHandler
+import logging
+
+console = Console()
 # Custom imports
 from utils.logger import setup_logger, log_action
 from utils.banner import display_banner
@@ -62,7 +68,7 @@ def initialize_framework():
         return db_manager, module_loader, plugin_loader, session_manager
 
     except Exception as e:
-        print(f"{Fore.RED}[!] Error during framework initialization: {e}{Style.RESET_ALL}")
+        console.print(f"[bold red][!] Error during framework initialization: {e}[/bold red]")
         sys.exit(1)
 
 def main():
