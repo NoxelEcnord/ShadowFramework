@@ -16,8 +16,8 @@ history.txt
 db/*.db
 
 # Loot and Exfiltrated data
-loot/exfiltrated_data/*
-!loot/exfiltrated_data/.gitkeep
+loot/*
+!loot/.gitkeep
 
 # OS generated files
 .DS_Store
