@@ -1,126 +1,117 @@
-import os
-from colorama import Fore, Style
+"""
+ShadowFramework — Session Manager
+Manages device connections and active exploitation sessions.
+"""
+import time
+from rich.console import Console
+from rich.table import Table
+
+console = Console()
+
 
 class SessionManager:
     def __init__(self, db_manager):
-        """
-        Initialize the session manager.
-
-        Args:
-            db_manager: Database manager instance.
-        """
         self.db_manager = db_manager
-        self.devices = {}  # Dictionary of devices: {id: {'ip': '192.168.1.1', 'serial': 'abc123', 'rooted': False}}
-        self.sessions = []  # List of active sessions
+        self.devices = {}
+        self.sessions = []
+        self._next_session_id = 1
 
-    def add_device(self, ip_address, serial, rooted=False):
-        """
-        Add a new device to the session manager.
-
-        Args:
-            ip_address: The device IP address.
-            serial: The device serial number.
-            rooted: Whether the device is rooted.
-
-        Returns:
-            The device ID (e.g., #1, #2).
-        """
+    def add_device(self, ip_address, serial, rooted=False, info=None):
+        """Add a new device."""
         device_id = f"#{len(self.devices) + 1}"
         self.devices[device_id] = {
             'ip': ip_address,
             'serial': serial,
-            'rooted': rooted
+            'rooted': rooted,
+            'info': info or {},
+            'added': time.strftime('%H:%M:%S'),
         }
-        print(f"{Fore.GREEN}[+] Added device: {device_id} ({ip_address}){Style.RESET_ALL}")
+        console.print(f"[green][+] Added device: {device_id} ({ip_address})[/green]")
         return device_id
 
     def get_devices(self):
-        """
-        Get a list of connected devices.
-
-        Returns:
-            A list of device IDs and their details.
-        """
         return self.devices
 
-    def add_session(self, device_id, module_name, output):
-        """
-        Add a new session to the session manager.
+    def add_session(self, device_id, module_name, output, session_type='exploit'):
+        """Add a new session."""
+        if device_id not in self.devices and device_id != 'local':
+            console.print(f"[red][!] Device not found: {device_id}[/red]")
+            return None
 
-        Args:
-            device_id: The device ID.
-            module_name: The module name.
-            output: The module output.
-        """
-        if device_id not in self.devices:
-            print(f"{Fore.RED}[!] Device not found: {device_id}{Style.RESET_ALL}")
-            return
-
-        session_id = len(self.sessions) + 1
+        session_id = self._next_session_id
+        self._next_session_id += 1
         session = {
             'id': session_id,
             'device_id': device_id,
             'module_name': module_name,
-            'output': output
+            'output': output,
+            'type': session_type,
+            'opened': time.strftime('%H:%M:%S'),
         }
         self.sessions.append(session)
-        print(f"{Fore.GREEN}[+] Added session: {session_id} ({module_name}){Style.RESET_ALL}")
+        console.print(f"[green][+] Session #{session_id} opened ({module_name})[/green]")
+        return session_id
 
     def get_sessions(self):
-        """
-        Get a list of active sessions.
-
-        Returns:
-            A list of active sessions.
-        """
         return self.sessions
 
     def get_device_info(self, device_id):
-        """
-        Get information about a specific device.
-
-        Args:
-            device_id: The device ID.
-
-        Returns:
-            A dictionary containing device information.
-        """
         return self.devices.get(device_id)
 
     def list_devices(self):
-        """
-        List all connected devices.
-        """
         if not self.devices:
-            print(f"{Fore.YELLOW}[!] No devices connected.{Style.RESET_ALL}")
+            console.print("[yellow][!] No devices connected.[/yellow]")
             return
 
-        print(f"{Fore.CYAN}[+] Connected devices:{Style.RESET_ALL}")
+        table = Table(title="Connected Devices")
+        table.add_column("ID", style="cyan")
+        table.add_column("IP", style="white")
+        table.add_column("Serial", style="dim")
+        table.add_column("Rooted", style="green")
+        table.add_column("Added", style="dim")
+
         for device_id, info in self.devices.items():
-            print(f"  {device_id}: {info['ip']} (Serial: {info['serial']}, Rooted: {info['rooted']})")
+            rooted = "✓" if info['rooted'] else "✗"
+            table.add_row(device_id, info['ip'], info['serial'], rooted, info.get('added', ''))
+
+        console.print(table)
 
     def list_sessions(self):
-        """
-        List all active sessions.
-        """
         if not self.sessions:
-            print(f"{Fore.YELLOW}[!] No active sessions.{Style.RESET_ALL}")
+            console.print("[yellow][!] No active sessions.[/yellow]")
             return
 
-        print(f"{Fore.CYAN}[+] Active sessions:{Style.RESET_ALL}")
+        table = Table(title="Active Sessions")
+        table.add_column("ID", style="cyan")
+        table.add_column("Device", style="white")
+        table.add_column("Module", style="green")
+        table.add_column("Type", style="dim")
+        table.add_column("Opened", style="dim")
+
         for session in self.sessions:
-            print(f"  Session {session['id']}: Device {session['device_id']}, Module {session['module_name']}")
+            table.add_row(
+                str(session['id']),
+                session['device_id'],
+                session['module_name'],
+                session.get('type', 'exploit'),
+                session.get('opened', ''),
+            )
+
+        console.print(table)
 
     def close_session(self, session_id):
-        """
-        Close an active session.
-
-        Args:
-            session_id: The session ID.
-        """
         for session in self.sessions:
             if session['id'] == session_id:
                 self.sessions.remove(session)
-                print(f"{Fore.GREEN}[+] Closed session: {session_id}{Style.RESET_ALL}")
-                return
-        print(f"{Fore.RED}[!] Session not found: {session_id}{Style.RESET_ALL}")
+                console.print(f"[green][+] Closed session #{session_id}[/green]")
+                return True
+        console.print(f"[red][!] Session not found: {session_id}[/red]")
+        return False
+
+    def remove_device(self, device_id):
+        if device_id in self.devices:
+            del self.devices[device_id]
+            console.print(f"[green][+] Removed device: {device_id}[/green]")
+            return True
+        console.print(f"[red][!] Device not found: {device_id}[/red]")
+        return False

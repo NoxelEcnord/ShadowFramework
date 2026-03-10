@@ -1,29 +1,40 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
 
-# Virtual Environment
-venv/
-ENV/
-env/
-
-# Logs
-logs/*.log
-history.txt
-
-# Database
+# Runtime data
 db/*.db
-
-# Loot and Exfiltrated data
+db/*.sqlite
 loot/*
 !loot/.gitkeep
+exports/
+*.log
 
-# OS generated files
+# Framework generated
+~/.shadow/
+*.history
+.shadow_history
+
+# OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Certs (generated at runtime)
+c2/*.pem
+c2/*.key
+c2/*.crt
+
+# Reports (generated at runtime)
+reports/

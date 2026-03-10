@@ -1,101 +1,136 @@
-import nmap
-from colorama import Fore, Style
+"""
+ShadowFramework — Nmap Scanner Module
+Comprehensive port/service/OS scanning with python-nmap or system nmap fallback.
+"""
+import subprocess
+from rich.console import Console
+from rich.table import Table
 from utils.logger import log_action
+
+console = Console()
+
+try:
+    import nmap
+    HAS_NMAP = True
+except ImportError:
+    HAS_NMAP = False
+
 
 class Module:
     MODULE_INFO = {
         'name': 'auxiliary/scanner',
-        'description': 'Perform a comprehensive scan of a target device using Nmap (all ports, services, and OS detection).',
+        'description': 'Comprehensive Nmap scanner — ports, services, and OS detection.',
         'options': {
             'RHOST': 'Target IP address',
-            'RPORT': 'Target port or port range (e.g., 80 or 1-1000) [default: 1-65535]',
-            'TIMEOUT': 'Scan timeout in seconds [default: 1]',
+            'RPORT': 'Target port or port range (e.g., 80 or 1-1000) [default: 1-1000]',
+            'TIMEOUT': 'Scan timing template 1-5 [default: 4]',
             'SERVICE_SCAN': 'Perform service detection [default: true]',
-            'OS_DETECTION': 'Perform OS detection [default: true]'
+            'OS_DETECTION': 'Perform OS detection (may require root) [default: false]',
+            'EXTRA_ARGS': 'Additional nmap arguments (e.g., -Pn, -A, --script=vuln) [default: ]',
         }
     }
 
     def __init__(self, framework):
-        """
-        Initialize the scanner module.
-
-        Args:
-            framework: The framework instance.
-        """
         self.framework = framework
-        self.nm = nmap.PortScanner()
 
     def run(self):
-        """
-        Run the comprehensive Nmap scan (all ports, services, and OS detection).
-        """
+        rhost = self.framework.options.get('RHOST')
+        rport = self.framework.options.get('RPORT', '1-1000')
+        timing = self.framework.options.get('TIMEOUT', '4')
+        service_scan = self.framework.options.get('SERVICE_SCAN', 'true').lower() == 'true'
+        os_detection = self.framework.options.get('OS_DETECTION', 'false').lower() == 'true'
+        extra_args = self.framework.options.get('EXTRA_ARGS', '')
+
+        if not rhost:
+            console.print("[red][!] RHOST is required.[/red]")
+            return
+
+        # Strip any port suffix that might leak in
+        if ':' in rhost:
+            rhost = rhost.split(':')[0]
+
+        # Safety check for large scans
+        if '/' in rhost and rport == '1-65535':
+            console.print("[bold yellow][!] WARNING: Scanning /24 subnet on ALL ports (65535) is EXTREMELY slow.[/bold yellow]")
+            console.print("[dim]    Tip: Use 'set RPORT 1-1000' for a 100x speed boost.[/dim]")
+
+        # Optimized scan args: added --host-timeout to prevent getting stuck on dead/shielded hosts
+        scan_args = f"-p {rport} --open -T{timing} --host-timeout 30s"
+        if service_scan:
+            scan_args += " -sV"
+        if os_detection:
+            scan_args += " -O"
+        if extra_args:
+            scan_args += f" {extra_args}"
+
+        console.print(f"[cyan][*] Scanning {rhost} (ports {rport})...[/cyan]")
+        if extra_args:
+            console.print(f"[dim]    Extra Arguments: {extra_args}[/dim]")
+        log_action(f"Nmap scan: {rhost} ports={rport} args={scan_args}")
+
+        if HAS_NMAP:
+            self._run_python_nmap(rhost, rport, scan_args)
+        else:
+            self._run_system_nmap(rhost, scan_args)
+
+    def _run_python_nmap(self, rhost, rport, scan_args):
+        """Scan using python-nmap library."""
         try:
-            # Get module options
-            rhost = self.framework.options.get('RHOST')
-            rport = self.framework.options.get('RPORT', '1-65535')  # Default to all ports
-            timeout = self.framework.options.get('TIMEOUT', '1')
-            service_scan = self.framework.options.get('SERVICE_SCAN', 'true').lower() == 'true'
-            os_detection = self.framework.options.get('OS_DETECTION', 'true').lower() == 'true'
+            nm = nmap.PortScanner()
+            nm.scan(hosts=rhost, arguments=scan_args)
 
-            # Validate RHOST
-            if not rhost:
-                print(f"{Fore.RED}[!] RHOST is required.{Style.RESET_ALL}")
+            if not nm.all_hosts():
+                console.print("[yellow][!] No hosts found (host may be down or filtered).[/yellow]")
+                log_action(f"Nmap: no hosts found for {rhost}", level="WARNING")
                 return
 
-            # Build Nmap arguments
-            scan_args = f"-p {rport} --open -T{timeout}"
-            if service_scan:
-                scan_args += " -sV"  # Enable service detection
-            if os_detection:
-                scan_args += " -O"   # Enable OS detection
+            for host in nm.all_hosts():
+                state = nm[host].state()
+                console.print(f"[green][+] Host: {host} ({state})[/green]")
 
-            # Run Nmap scan
-            print(f"{Fore.CYAN}[*] Scanning {rhost} (ports {rport})...{Style.RESET_ALL}")
-            log_action(f"Starting Nmap scan on {rhost}:{rport} with args: {scan_args}")
+                # OS detection
+                if 'osmatch' in nm[host]:
+                    for os_match in nm[host]['osmatch'][:3]:
+                        console.print(f"    OS: {os_match['name']} ({os_match['accuracy']}%)")
 
-            # Perform the scan
-            self.nm.scan(hosts=rhost, arguments=scan_args)
+                # Port table
+                table = Table(title=f"Open Ports — {host}")
+                table.add_column("Port", style="cyan")
+                table.add_column("State", style="green")
+                table.add_column("Service", style="white")
+                table.add_column("Version", style="dim")
 
-            # Check if the scan was successful
-            if not self.nm.all_hosts():
-                print(f"{Fore.RED}[!] No hosts found.{Style.RESET_ALL}")
-                log_action(f"No hosts found during Nmap scan on {rhost}", level="WARNING")
-                return
+                for proto in nm[host].all_protocols():
+                    for port in sorted(nm[host][proto]):
+                        info = nm[host][proto][port]
+                        version = f"{info.get('product', '')} {info.get('version', '')}".strip()
+                        table.add_row(f"{port}/{proto}", info['state'], info['name'], version)
+                        log_action(f"  {port}/{proto}: {info['state']} ({info['name']} {version})")
 
-            # Display and log results
-            for host in self.nm.all_hosts():
-                print(f"{Fore.GREEN}[+] Host: {host}{Style.RESET_ALL}")
-                log_action(f"Scan results for {host}")
-
-                # Host state
-                host_state = self.nm[host].state()
-                print(f"  State: {Fore.GREEN if host_state == 'up' else Fore.RED}{host_state}{Style.RESET_ALL}")
-                log_action(f"Host {host} is {host_state}")
-
-                # OS detection results
-                if os_detection and 'osmatch' in self.nm[host]:
-                    print(f"  OS Detection:")
-                    for os_match in self.nm[host]['osmatch']:
-                        print(f"    {os_match['name']} (Accuracy: {os_match['accuracy']}%)")
-                        log_action(f"OS detected: {os_match['name']} (Accuracy: {os_match['accuracy']}%)")
-
-                # Port and service results
-                for proto in self.nm[host].all_protocols():
-                    print(f"  Protocol: {proto}")
-                    log_action(f"Protocol {proto} found on {host}")
-
-                    ports = self.nm[host][proto].keys()
-                    for port in ports:
-                        state = self.nm[host][proto][port]['state']
-                        service = self.nm[host][proto][port]['name']
-                        product = self.nm[host][proto][port].get('product', '')
-                        version = self.nm[host][proto][port].get('version', '')
-                        print(f"    Port: {port}/{proto} - {state} ({service} {product} {version})")
-                        log_action(f"Port {port}/{proto} is {state} ({service} {product} {version})")
+                console.print(table)
 
         except nmap.PortScannerError as e:
-            print(f"{Fore.RED}[!] Nmap error: {e}{Style.RESET_ALL}")
+            console.print(f"[red][!] Nmap error: {e}[/red]")
             log_action(f"Nmap error: {e}", level="ERROR")
         except Exception as e:
-            print(f"{Fore.RED}[!] Error during scanning: {e}{Style.RESET_ALL}")
+            console.print(f"[red][!] Scan error: {e}[/red]")
             log_action(f"Scan error: {e}", level="ERROR")
+
+    def _run_system_nmap(self, rhost, scan_args):
+        """Fallback: run nmap as a system command."""
+        console.print("[yellow][!] python-nmap not installed. Using system nmap...[/yellow]")
+
+        cmd = f"nmap {scan_args} {rhost}"
+        console.print(f"[dim]  $ {cmd}[/dim]")
+
+        try:
+            result = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=300)
+            if result.returncode == 0:
+                console.print(result.stdout)
+            else:
+                console.print(f"[red]{result.stderr}[/red]")
+        except FileNotFoundError:
+            console.print("[red][!] nmap not found. Install with: apt install nmap[/red]")
+            console.print("[dim]  For python-nmap: pip install python-nmap[/dim]")
+        except subprocess.TimeoutExpired:
+            console.print("[red][!] Scan timed out (300s limit).[/red]")
