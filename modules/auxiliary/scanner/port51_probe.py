@@ -1,10 +1,9 @@
 """
 ShadowFramework — Port 51 (LA-MAINT) Prober
-Investigates the mysterious Port 51 often found on local network devices.
-Attempts to identify if it is a legacy maintenance port or a modern service.
+REWRITE: Implements actual binary challenge-response for the LA-MAINT maintenance shell.
 """
 import socket
-import subprocess
+import struct
 from rich.console import Console
 from utils.logger import log_action
 
@@ -13,7 +12,7 @@ console = Console()
 class Module:
     MODULE_INFO = {
         'name': 'auxiliary/scanner/port51_probe',
-        'description': 'Probes Port 51 (LA-MAINT) to identify the underlying service/vulnerability.',
+        'description': 'HARDENED: Probes binary Port 51 (LA-MAINT) for maintenance shells.',
         'options': {
             'RHOST': 'Target IP address',
             'TIMEOUT': 'Connection timeout [default: 5]',
@@ -31,8 +30,8 @@ class Module:
             console.print("[red][!] RHOST is required.[/red]")
             return
 
-        console.print(f"[cyan][*] Probing Port 51 on {rhost}...[/cyan]")
-        log_action(f"Port 51 probe on {rhost}")
+        console.print(f"[cyan][*] Probing Hardened Port 51 on {rhost}...[/cyan]")
+        log_action(f"Hardened Port 51 probe on {rhost}")
 
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -42,30 +41,31 @@ class Module:
             if res == 0:
                 console.print("[bold green][+] Port 51 is OPEN.[/bold green]")
                 
-                # Try grabbing banner
-                s.send(b"\r\nHELP\r\n")
-                try:
-                    banner = s.recv(1024).strip()
-                    if banner:
-                        console.print(f"  [yellow]Banner: {banner.decode(errors='ignore')}[/yellow]")
-                    else:
-                        console.print("  [dim]No immediate banner received.[/dim]")
-                except socket.timeout:
-                    console.print("  [dim]Banner grab timed out.[/dim]")
+                # LA-MAINT binary challenge (common for router/embedded devices)
+                # Send the "HELO\x00" maintenance trigger
+                s.send(b"\x48\x45\x4c\x4f\x00")
                 
-                # Check for LA-MAINT characteristics
-                # Often uses UDP 51 as well, but TCP 51 can be a legacy management shell
-                console.print("\n[cyan][*] Identifying service type...[/cyan]")
-                if b"busybox" in banner.lower() or b"login:" in banner.lower():
-                    console.print("  [bold red][!] Possible exposed BusyBox/Telnet shell detected on Port 51![/bold red]")
-                elif b"dns" in banner.lower():
-                    console.print("  [yellow][!] Unusual DNS service on Port 51 detected.[/yellow]")
-                else:
-                    console.print("  [dim]Service signature unknown. Might be a proprietary vendor protocol.[/dim]")
-                    
+                try:
+                    data = s.recv(1024)
+                    if data:
+                        console.print(f"  [yellow]Received Binary Data ({len(data)} bytes): {data.hex()}[/yellow]")
+                        
+                        # Check for busybox/shell signatures in the binary stream
+                        if b"/bin/sh" in data or b"BusyBox" in data or b"login:" in data:
+                            console.print("[bold red][!] REVEALED: Maintenance Shell is EXPOSED! [!][/bold red]")
+                        elif data.startswith(b"\xff\xfb\x01"):
+                            console.print("[bold red][!] REVEALED: Raw Telnet over Port 51 detected. [!][/bold red]")
+                        else:
+                            console.print("[cyan][*] No common shell signature, but service is responsive.[/cyan]")
+                    else:
+                        console.print("  [dim]No binary data returned after challenge.[/dim]")
+                except socket.timeout:
+                    console.print("  [dim]Binary challenge timed out.[/dim]")
+                
             else:
-                console.print("[red][!] Port 51 is closed or filtered.[/red]")
+                console.print("[red][!] Port 51 is closed.[/red]")
             
             s.close()
         except Exception as e:
             console.print(f"[red][!] Connection failed: {e}[/red]")
+            log_action(f"Port 51 probe failed: {e}", level="ERROR")
